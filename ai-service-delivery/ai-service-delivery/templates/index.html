@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI-Enabled Service Delivery</title>
+<style>
+ body{font-family:system-ui,sans-serif;margin:0;background:#f4f6f9;color:#1d2433}
+ header{background:#1f3a5f;color:#fff;padding:16px 24px}
+ main{max-width:1000px;margin:20px auto;padding:0 16px;display:grid;gap:20px}
+ section{background:#fff;border-radius:10px;padding:18px;box-shadow:0 1px 4px #0001}
+ input,textarea,button,select{font:inherit;padding:8px;border:1px solid #ccd;border-radius:6px;width:100%;box-sizing:border-box;margin:4px 0}
+ button{background:#2f6fed;color:#fff;border:0;cursor:pointer;width:auto;padding:8px 18px}
+ table{width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;padding:8px;border-bottom:1px solid #eee;vertical-align:top}
+ .tag{padding:2px 8px;border-radius:10px;font-size:12px;color:#fff}
+ .high{background:#d64545}.medium{background:#e0a100}.low{background:#3a9d5d}
+ .stats{display:flex;gap:12px;flex-wrap:wrap}.stat{background:#eef3fb;padding:10px 16px;border-radius:8px}
+ #result{margin-top:10px;background:#eef8f0;padding:10px;border-radius:6px;display:none}
+</style></head><body>
+<header><h2 style="margin:0">AI-Enabled Service Delivery</h2></header>
+<main>
+ <section><h3>Submit a service request</h3>
+  <input id="name" placeholder="Your name">
+  <textarea id="message" rows="4" placeholder="Describe your issue..."></textarea>
+  <button onclick="submitTicket()">Submit</button>
+  <div id="result"></div></section>
+ <section><h3>Dashboard</h3><div class="stats" id="stats"></div></section>
+ <section><h3>Ticket queue (sorted by AI priority)</h3>
+  <table><thead><tr><th>#</th><th>Customer</th><th>Request</th><th>Category / Team</th><th>Priority</th><th>Due</th><th>Status</th></tr></thead>
+  <tbody id="rows"></tbody></table></section>
+</main>
+<script>
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function submitTicket(){
+  const name=document.getElementById('name').value, message=document.getElementById('message').value;
+  const r=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,message})});
+  const d=await r.json(), el=document.getElementById('result'); el.style.display='block';
+  if(!r.ok){el.textContent=d.error;return}
+  el.innerHTML=`<b>Ticket #${d.id}</b> → ${esc(d.category)} / ${esc(d.team)} / ${esc(d.priority)} priority (via ${d.source})<br><i>${esc(d.reply)}</i>`;
+  document.getElementById('message').value=''; load();
+}
+async function setStatus(id,s){await fetch('/api/tickets/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:s})});load()}
+async function load(){
+  const [t,s]=await Promise.all([fetch('/api/tickets').then(r=>r.json()),fetch('/api/stats').then(r=>r.json())]);
+  document.getElementById('stats').innerHTML=`<div class="stat">Total<br><b>${s.total}</b></div>`+
+    s.by_priority.map(x=>`<div class="stat">${esc(x.k)}<br><b>${x.n}</b></div>`).join('')+
+    s.by_status.map(x=>`<div class="stat">${esc(x.k)}<br><b>${x.n}</b></div>`).join('');
+  document.getElementById('rows').innerHTML=t.map(x=>`<tr><td>${x.id}</td><td>${esc(x.name)}</td><td>${esc(x.message)}</td>
+   <td>${esc(x.category)}<br><small>${esc(x.team)}</small></td><td><span class="tag ${x.priority}">${x.priority}</span></td>
+   <td><small>${x.due.replace('T',' ')}</small></td>
+   <td><select onchange="setStatus(${x.id},this.value)">${['open','in_progress','resolved'].map(o=>`<option ${o==x.status?'selected':''}>${o}</option>`).join('')}</select></td></tr>`).join('');
+}
+load();
+</script></body></html>
